@@ -1,0 +1,30 @@
+.divhead {
+    background-color: #FFE4DE;
+    border: 1px solid #860000;
+    margin-bottom: 2px;
+    width: 100%;
+  }
+
+
+pre {
+    background-color : #F5FFF5;
+    border: 1px solid #C7FF9A;
+    margin-bottom : 2px;
+    width : 100%;
+    font-size: 8pt;
+  }
+
+
+html, body {
+    height:auto;
+    height:100%;
+    background-color : #f1f5ed;
+    font-family : Tahoma,"Trebuchet MS","Nimbus Sans L",Arial,"Franklin Gothic Medium","Helvetica Neue",Geneva,Verdana,"URW Gothic L","Gill Sans",Helvetica,"Lucida Sans Unicode","Arial Black","Lucida Grande","Microsoft Sans Serif",sans-serif;
+    font-size : 12pt;
+  }
+
+
+a {
+    text-decoration : none;
+  }
+

@@ -1,0 +1,296 @@
+#!/bin/bash
+
+#SCRIPTPATH=$( cd $(dirname $0) ; pwd -P )
+SCRIPTPATH="$(dirname -- "$(readlink -f -- "$0")")"
+CONFIGURATIONFILE=$SCRIPTPATH/sbgrab.conf
+
+if [ ! -f $CONFIGURATIONFILE ]; then
+  echo "Required file sbgrab.conf is missing. Exiting"
+  exit
+fi
+
+. $CONFIGURATIONFILE
+
+# Parse paths from config file, ensure proper trailing slash.
+SOURCEDIR=${REMOTEDIR%/}/
+DESTDIR=${LOCALDIR%/}/
+REMOTEHTMLDIR=${REMOTEHTMLSERVERDIR%/}
+HTMLBASEDIR=${LOCALHTMLDIR%/}
+
+LOCKFILE=$SCRIPTPATH/.sbgrab.lockfile
+RSYNCLOG=$SCRIPTPATH/.sbgrab-rsync.logfile
+HTMLDATEFILE=$HTMLBASEDIR/date.php
+
+# Don't change these
+TIMENOW=`date "+%d-%m-%Y %T"`
+RTIMESTAMP=`date +%s`
+RMONTHYEAR=`date +%B%Y`
+RMONTHYEARFRIENDLY=`date "+%B %Y"`
+
+
+# ----------------------------------------------------
+# FUNCTIONS START HERE -------------------------------
+# ----------------------------------------------------
+
+convert_time()
+{
+  S=${1}
+
+  h=$(($S/3600))
+  m=$(($S%3600/60))
+  s=$(($S%60))
+
+  if [ ${1} -eq 1 ]; then
+    printf "%d Second\n" $s
+  elif [ ${1} -lt 60 ]; then
+    printf "%d Seconds\n" $s
+  elif [ ${1} -lt 120 ]; then
+    printf "%d Minute and %d Seconds\n" $m $s
+  elif [ ${1} -lt 3600 ]; then
+    printf "%d Minutes and %d Seconds\n" $m $s
+  elif [ ${1} -lt 7200 ]; then
+    printf "%d Hour, %d Minutes and %d Seconds\n" $h $m $s
+  else
+    printf "%d Hours, %d Minutes and %d Seconds\n" $h $m $s
+  fi
+
+ }
+
+# -------------------------------------------
+#       Sync status website to web server ---
+# -------------------------------------------
+
+websync()
+{
+  rsync -av ${HTMLBASEDIR}/ -e ssh ${REMOTEHTMLSERVER}:${REMOTEHTMLDIR}/ >/dev/null 2>&1
+
+  STATUSDURATION=`printf "%02d:%02d:%02d\n" $((RDURATION/3600)) $((RDURATION/60%60)) $((RDURATION%60))`
+  echo [ `date +"%Y-%m-%d %H:%M"` ] [ FINISHED IN ${STATUSDURATION} ] ${RLOGMESSAGE}
+}
+
+
+# ----------------------------------------------------
+# Function to update the log files and menu system ---
+# ----------------------------------------------------
+
+update_log()
+{
+
+  RTIMERUNNING=`convert_time ${RPROCESSTIME}`
+
+  case $1 in 
+    'filestransferred')
+      RSTATUS='Files Transferred'
+      RMESSAGE='New files were present and were copied from the server'
+      RLOGMESSAGE='FILES TRANSFERRED'
+      RCLASS='filestransferred'
+      DIVCLASS='divtransferred'
+    ;;
+    'newfilespresent')
+      RSTATUS='New Files Present'
+      RLOGMESSAGE='FILES AVAILABLE'
+      RMESSAGE='New files are present and are going to be copied from the server'
+      RCLASS='filespresent'
+      DIVCLASS='divpresent'
+    ;;
+    'uptodate')
+      RSTATUS='Files Up To Date'
+      RLOGMESSAGE='UP TO DATE'
+      RMESSAGE='All files were already up to date, no action necessary'
+      RCLASS='filesuptodate'
+      DIVCLASS='divuptodate'
+    ;;
+    'stillrunning')
+      RNOW=`date +%s`
+      RDURATION=$(($RNOW - $RTIMESTAMP))
+      RSTATUS='Previous Job Still In Progress'
+      RCLASS='busy'
+      DIVCLASS='divbusy'
+      RLOGMESSAGE='STILL WORKING... '${RTIMERUNNING}
+      RMESSAGE='The previous job is still being processed, it has been running for <b>'${RTIMERUNNING}'</b>'
+    ;;
+    'error')
+      RNOW=`date +%s`
+      RDURATION=$(($RNOW - $RTIMESTAMP))
+      RSTATUS='An Error Occurred'
+      RCLASS='error'
+      DIVCLASS='diverror'
+      RMESSAGE="An Error Occurred. The exit code was $RSYNCEXIT"
+      RLOGMESSAGE="RSYNC ERROR: $RSYNCEXIT"
+    ;;
+    'frozen')
+      RNOW=`date +%s`
+      RDURATION=$(($RNOW - $RTIMESTAMP))
+      RSTATUS='The process froze!'
+      RCLASS='frozen'
+      DIVCLASS='divfrozen'
+      RMESSAGE="The process froze, deleted lock file and restarted"
+      RLOGMESSAGE='FROZEN PROCESS RESTARTED'
+    ;;
+  esac
+
+  # ------------------------------------
+  # Write Rsync log file to php file ---
+  # ------------------------------------
+
+  touch ${HTMLBASEDIR}/temp.txt
+  echo '<pre>' >> ${HTMLBASEDIR}/temp.txt
+  sed 's/.*\r/\n/g' ${RSYNCLOG} >> ${HTMLBASEDIR}/temp.txt
+  echo '</pre>' >> ${HTMLBASEDIR}/temp.txt
+
+  touch ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo "<?php include '../includes/logheader.html' ?>" > ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo '<p style="margin-top:0px;">Process took <b>'`convert_time ${RDURATION}`'</b> to complete.<br />'${RMESSAGE}'</p>' >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo '<b>Free Disk Space</b><pre style="background-color:transparent;border:none;margin:0px;">' >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  df -h ${DESTDIR} >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo '</pre>' >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo "<?php include '../includes/logseperator.html' ?>" >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  cat ${HTMLBASEDIR}/temp.txt >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  echo "<?php include '../includes/logfooter.html' ?>" >> ${HTMLBASEDIR}/${RMONTHYEAR}/${RTIMESTAMP}${RCLASS}.php
+  rm -f ${HTMLBASEDIR}/temp.txt
+
+  # -----------------------------------------------------------
+  #	Append date, time and subject to the Subject page ---
+  # -----------------------------------------------------------
+
+  touch ${HTMLBASEDIR}/temp.php
+  sed 1d ${HTMLBASEDIR}/${RMONTHYEAR}.php > ${HTMLBASEDIR}/temp.php
+  echo "<?php include 'includes/subjectheader.html' ?>" > ${HTMLBASEDIR}/${RMONTHYEAR}.php
+  echo '<div class="'${DIVCLASS}'"><a href="'${RMONTHYEAR}'/'${RTIMESTAMP}${RCLASS}'.php" target="message" class="'$RCLASS'"><b>'${TIMENOW}'</b>' ${RSTATUS}'</a></div>' >> ${HTMLBASEDIR}/${RMONTHYEAR}.php
+  #echo "<?php include 'includes/subjectbottom.html' ?>" >> ${HTMLBASEDIR}/${RMONTHYEAR}.php
+  cat ${HTMLBASEDIR}/temp.php >> ${HTMLBASEDIR}/${RMONTHYEAR}.php
+    if grep -q subjectfooter.html ${HTMLBASEDIR}/${RMONTHYEAR}.php ; then
+      echo > /dev/null
+    else
+      echo "<?php include 'includes/subjectfooter.html' ?>" >> ${HTMLBASEDIR}/${RMONTHYEAR}.php
+  fi
+
+  rm -f ${HTMLBASEDIR}/temp.php
+
+  websync
+
+}
+
+# -----------------------------------------------------------
+#       Function to do the actual rsync process -------------
+# -----------------------------------------------------------
+
+do_sync()
+{
+  touch ${LOCKFILE}
+  echo ${RTIMESTAMP} > ${LOCKFILE}
+  case $1 in
+    'liverun')
+      rsync -vrhIH --partial --inplace --append-verify --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --perms --chmod=a+rw -he "ssh -c arcfour" $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
+      RSYNCEXIT=$?
+    ;;
+    *)
+      # Default to dry-run        
+      rsync -vrhIH --partial --inplace --append-verify --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --dry-run --itemize-changes -he ssh $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
+      RSYNCEXIT=$?
+      NUMBEROFFILES=`cat $RSYNCLOG | grep -e "Number of files transferred: " -e "Number of regular files transferred: " | sed -e s/[^0-9]//g`
+    ;;
+  esac
+
+  RNOW=`date +%s`
+  RDURATION=$((${RNOW} - ${RTIMESTAMP}))
+  RPROCESSTIME=${RDURATION}
+
+  case $1 in
+    'liverun')
+      if grep -Fq -e "xfer#" -e "xfr#" $RSYNCLOG
+      then
+        if [ $RSYNCEXIT -ne 0 ]
+        then
+          update_log 'error'
+        else
+          update_log 'filestransferred'
+        fi
+      else
+        if [ $RSYNCEXIT -ne 0 ]
+        then
+          update_log 'error'
+        else
+          update_log 'uptodate'
+        fi
+      fi
+    ;;
+    *)
+      # Default dry-run
+      if [[ "$NUMBEROFFILES" > "0" ]]
+      then
+        if [ $RSYNCEXIT -ne 0 ]
+        then
+          update_log 'error'
+        else
+          update_log 'newfilespresent'
+          do_sync 'liverun'
+        fi
+      else
+        if [ $RSYNCEXIT -ne 0 ]
+        then
+          update_log 'error'
+        else
+          update_log 'uptodate'
+        fi
+      fi
+    ;;
+  esac
+  rm -f ${LOCKFILE}
+  rm -f ${RSYNCLOG}
+}
+
+
+# ------------------------------------------------------------------
+# If this is the first entry of the month create a new date file ---
+# ------------------------------------------------------------------
+
+touch "$HTMLDATEFILE"
+if ! grep -q $RMONTHYEAR $HTMLDATEFILE ; then
+  echo [ `date +"%Y-%m-%d %H:%M"` ] [ GENERATING MENU ITEM ] New Month. Generating menu entry
+  cp ${HTMLDATEFILE} ${HTMLBASEDIR}/temp.txt
+  echo "<?php include 'includes/dateheader.html' ?>" > ${HTMLDATEFILE}
+  echo '<div class="divdate"><a href="'${RMONTHYEAR}'.php" target="subject">'${RMONTHYEARFRIENDLY}'</a></div>' >> ${HTMLDATEFILE}
+  #echo "<?php include 'includes/datebottom.html' ?>" >> ${HTMLDATEFILE}
+  sed 1d ${HTMLBASEDIR}/temp.txt >> ${HTMLDATEFILE}
+  if ! grep -q datefooter.html $HTMLDATEFILE ; then
+    echo "<?php include 'includes/datefooter.html' ?>" >> ${HTMLDATEFILE}
+  fi
+  rm -f ${HTMLBASEDIR}/temp.txt
+  touch ${HTMLBASEDIR}/${RMONTHYEAR}.php
+fi
+
+if [ ! -d ${HTMLBASEDIR}/${RMONTHYEAR} ]
+  then
+  mkdir ${HTMLBASEDIR}/${RMONTHYEAR}
+fi
+
+# ------------------------------------------------------
+# Determine if the previous process is still running ---
+# ------------------------------------------------------
+
+#echo "ps aux | grep \"--log-file=$RSYNCLOG\" | wc -l)"
+
+if [ -f ${LOCKFILE} ]; then
+  if [ $(ps aux | grep "log-file=$RSYNCLOG" | wc -l) -ne 1 ]
+    then
+      # PREVIOUS RSYNC PROCESS STILL RUNNING
+      RNOW=`date +%s`
+      RSTARTTIME=`cat ${LOCKFILE}`
+      RPROCESSTIME=$((${RTIMESTAMP}-${RSTARTTIME}))
+      RDURATION=$((${RNOW} - ${RTIMESTAMP}))
+      update_log 'stillrunning'
+    else  
+      # PREVIOUS RSYNC PROCESS FROZEN
+      RNOW=`date +%s`
+      RSTARTTIME=`cat ${LOCKFILE}`
+      RPROCESSTIME=$((${RTIMESTAMP}-${RSTARTTIME}))
+      RDURATION=$((${RNOW} - ${RTIMESTAMP}))
+      update_log 'frozen'
+      do_sync
+    fi
+else
+
+# PREVIOUS RSYNC PROCESS NOT RUNNING
+  do_sync 'dryrun'
+fi

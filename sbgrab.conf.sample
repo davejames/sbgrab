@@ -1,0 +1,31 @@
+# All paths can be entered with or without trailing slash
+#
+# You need to copy this file to sbgrab.conf
+#
+# The script won't run without it
+
+# Full path to the files to be downloaded are stored on the server
+REMOTEDIR=/path/to/files/on/server
+
+# Username and IP/Hostname of the SSH server to be downloaded from
+# ie. "user@192.168.1.2"
+SOURCESERVER=user@serverip
+
+# Full path to where you want the files to be downloaded
+LOCALDIR=/path/to/local/download/location
+
+# Web Server Details
+# Make sure the location exists and is writable by the user
+REMOTEHTMLSERVER=user@webserverip
+REMOTEHTMLSERVERDIR=/path/to/web/server
+
+# Local web server details
+#
+# can be any location to store the files before sending to remote web server if
+# you're not running a local web server.
+#
+# eg:
+#
+# HTMLBASEDIR=/var/www/sbgrab-report
+
+LOCALHTMLDIR=$SCRIPTPATH/www

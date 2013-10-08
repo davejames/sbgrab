@@ -1,0 +1,11 @@
+.divbusy        { background-color: #FFF5CA; border: 1px solid #FFE226; margin-bottom: 2px; width: 100%; }
+.divuptodate    { background-color: #DEFFEB; border: 1px solid #B5FFAB; margin-bottom: 2px; width: 100%; }
+.divtransferred { background-color: #2BFF01; border: 1px solid #ACFF1D; margin-bottom: 2px; width: 100%; }
+.diverror       { background-color: #BF0000; border: 1px solid #5C0000; margin-bottom: 2px; width: 100%; }
+.divpresent	{ background-color: #33D79F; border: 1px solid #449177; margin-bottom: 2px; width: 100%; }
+.divfrozen	{ background-color: #E8D749; border: 1px solid #918949; margin-bottom: 2px; width: 100%; }
+a.error         { color: white; }
+
+body { background-color : #f1f5ed; font-family : Tahoma,"Trebuchet MS","Nimbus Sans L",Arial,"Franklin Gothic Medium","Helvetica Neue",Geneva,Verdana,"URW Gothic L","Gill Sans",Helvetica,"Lucida Sans Unicode","Arial Black","Lucida Grande","Microsoft Sans Serif",sans-serif; font-size : 10pt; }
+
+a { text-decoration : none; }
