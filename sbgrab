@@ -181,7 +181,7 @@ do_sync()
   echo ${RTIMESTAMP} > ${LOCKFILE}
   case $1 in
     'liverun')
-      rsync -vrhIH --partial --inplace --append-verify --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --perms --chmod=a+rw -he "ssh -c arcfour" $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
+      rsync -vrhIH --partial --inplace --append-verify --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --perms --chmod=a+rwx -he "ssh -c arcfour" $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
       RSYNCEXIT=$?
     ;;
     *)
