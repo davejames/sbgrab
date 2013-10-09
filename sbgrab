@@ -181,12 +181,12 @@ do_sync()
   echo ${RTIMESTAMP} > ${LOCKFILE}
   case $1 in
     'liverun')
-      rsync -vrhIHt --partial --inplace --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --perms --chmod=a+rwx -he "ssh -c arcfour" $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
+      rsync -vrhHt --modify-window=1 --partial --inplace --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --perms --chmod=a+rwx -he "ssh -c arcfour" $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
       RSYNCEXIT=$?
     ;;
     *)
       # Default to dry-run        
-      rsync -vrhIHt --partial --inplace --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --dry-run --itemize-changes -he ssh $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
+      rsync -vrhHt --modify-window=1 --partial --inplace --progress --stats --log-file=$RSYNCLOG --log-file-format=%n --dry-run --itemize-changes -he ssh $SOURCESERVER:$SOURCEDIR $DESTDIR >${RSYNCLOG} 2>&1
       RSYNCEXIT=$?
       NUMBEROFFILES=`cat $RSYNCLOG | grep -e "Number of files transferred: " -e "Number of regular files transferred: " | sed -e s/[^0-9]//g`
     ;;
