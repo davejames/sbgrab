@@ -18,7 +18,8 @@ REMOTEHTMLDIR=${REMOTEHTMLSERVERDIR%/}
 HTMLBASEDIR=${LOCALHTMLDIR%/}
 
 LOCKFILE=$SCRIPTPATH/.sbgrab.lockfile
-RSYNCLOG=$SCRIPTPATH/.sbgrab-rsync.logfile
+RSYNCLOG=$SCRIPTPATH/.rsync.current
+PREVRSYNCLOG=$SCRIPTPATH/.rsync.log
 HTMLDATEFILE=$HTMLBASEDIR/date.php
 
 # Don't change these
@@ -118,21 +119,32 @@ update_log()
       RMESSAGE="An Error Occurred. The exit code was $RSYNCEXIT"
       RLOGMESSAGE="RSYNC ERROR: $RSYNCEXIT"
     ;;
-    'frozen')
+    'uncleanexit')
       RNOW=`date +%s`
       RDURATION=$(($RNOW - $RTIMESTAMP))
-      RSTATUS='The process froze!'
+      RSTATUS='The process has ended but the lockfile is still present'
       RCLASS='frozen'
       DIVCLASS='divfrozen'
-      RMESSAGE="The process froze, deleted lock file and restarted"
-      RLOGMESSAGE='FROZEN PROCESS RESTARTED'
+      RMESSAGE="The previous process ended uncleanly, deleted lock file and restarted"
+      RLOGMESSAGE='UNCLEANLY EXITED PROCESS RESTARTED'
     ;;
+    'stalled')
+      RNOW=`date +%s`
+      RDURATION=$(($RNOW - $RTIMESTAMP))
+      RSTATUS='No change in rsync output between runs, probably stalled'
+      RCLASS='frozen'
+      DIVCLASS='divfrozen'
+      RMESSAGE="Rsync has stalled, restarted process"
+      RLOGMESSAGE='STALLED PROCESS RESTARTED'
+    ;;
+
   esac
 
   # ------------------------------------
   # Write Rsync log file to php file ---
   # ------------------------------------
 
+  touch ${RSYNCLOG}
   touch ${HTMLBASEDIR}/temp.txt
   echo '<pre>' >> ${HTMLBASEDIR}/temp.txt
   sed 's/.*\r/\n/g' ${RSYNCLOG} >> ${HTMLBASEDIR}/temp.txt
@@ -236,6 +248,10 @@ do_sync()
       fi
     ;;
   esac
+  if [ -f ${RSYNCLOG} ]; then
+    \cp -rf ${RSYNCLOG} ${PREVRSYNCLOG}
+  fi
+  #\cp -rf ${RSYNCLOG} ${PREVRSYNCLOG}
   rm -f ${LOCKFILE}
   rm -f ${RSYNCLOG}
 }
@@ -274,19 +290,31 @@ fi
 if [ -f ${LOCKFILE} ]; then
   if [ $(ps aux | grep "log-file=$RSYNCLOG" | wc -l) -ne 1 ]
     then
-      # PREVIOUS RSYNC PROCESS STILL RUNNING
-      RNOW=`date +%s`
-      RSTARTTIME=`cat ${LOCKFILE}`
-      RPROCESSTIME=$((${RTIMESTAMP}-${RSTARTTIME}))
-      RDURATION=$((${RNOW} - ${RTIMESTAMP}))
-      update_log 'stillrunning'
+      cmp -s ${RSYNCLOG} ${PREVRSYNCLOG}
+      RETVAL=$?
+      if [ $RETVAL -eq 0 ]
+        then
+          echo [ `date +"%Y-%m-%d %H:%M"` ] [ FINISHED IN ${STATUSDURATION} ] "PREVIOUS RSYNC PROCESS STALLED, RESTARTING"
+          kill $(ps aux | grep "[l]og-file=$RSYNCLOG" | awk '{print $2}')
+          update_log 'stalled'
+          sleep 5
+          do_sync
+        else
+          # PREVIOUS RSYNC PROCESS STILL RUNNING
+          RNOW=`date +%s`
+          RSTARTTIME=`cat ${LOCKFILE}`
+          RPROCESSTIME=$((${RTIMESTAMP}-${RSTARTTIME}))
+          RDURATION=$((${RNOW} - ${RTIMESTAMP}))
+          \cp -rf ${RSYNCLOG} ${PREVRSYNCLOG}
+          update_log 'stillrunning'
+      fi
     else  
-      # PREVIOUS RSYNC PROCESS FROZEN
+      # PREVIOUS RSYNC EXITED UNCLEANLY
       RNOW=`date +%s`
       RSTARTTIME=`cat ${LOCKFILE}`
       #RPROCESSTIME=$((${RTIMESTAMP}-${RSTARTTIME}))
       RDURATION=$((${RNOW} - ${RTIMESTAMP}))
-      update_log 'frozen'
+      update_log 'uncleanexit'
       do_sync
     fi
 else
